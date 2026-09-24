@@ -12,4 +12,14 @@ return [
         'from' => 'noreply@condordefi.com',
         'from_name' => 'CondorDeFi',
     ],
+    'debank' => [
+        'account' => 'tu-email@ejemplo.com',
+        'access_key' => 'CAMBIAR',
+    ],
+    'etherscan' => [
+        'api_key' => 'CAMBIAR',
+    ],
+    'nodereal' => [
+        'api_key' => 'CAMBIAR',
+    ],
 ];

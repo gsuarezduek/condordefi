@@ -1,0 +1,187 @@
+:root{
+  --bg:#0f0f0e;
+  --panel:#161615;
+  --panel-border:#232320;
+  --card:#ffffff;
+  --gold:#e9b73e;
+  --gold-dark:#c99a2b;
+  --text-dim:#9a9a9a;
+  --border:#e4e0d4;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  min-height:100vh;
+  display:flex;
+  background:var(--bg);
+  color:#fff;
+  font-family:'Helvetica Neue', Arial, sans-serif;
+}
+
+/* --- Sidebar --- */
+.sidebar{
+  width:220px;
+  flex-shrink:0;
+  background:var(--panel);
+  border-right:1px solid var(--panel-border);
+  padding:24px 16px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  /* Fijo a la altura de la ventana: no se corta cuando la página es larga. */
+  position:sticky;
+  top:0;
+  height:100vh;
+  align-self:flex-start;
+  overflow-y:auto;
+}
+.sidebar .brand{
+  font-weight:700;
+  font-size:15px;
+  color:var(--gold);
+  padding:0 12px;
+  margin-bottom:22px;
+}
+.sidebar a{
+  color:var(--text-dim);
+  text-decoration:none;
+  font-size:13.5px;
+  padding:10px 12px;
+  border-radius:8px;
+  transition:background .15s ease, color .15s ease;
+}
+.sidebar a:hover{background:#1f1f1d;color:#fff;}
+.sidebar a.active{background:var(--panel-border);color:#fff;font-weight:600;}
+.sidebar .spacer{flex:1;}
+.sidebar .user{
+  font-size:11px;
+  color:var(--text-dim);
+  padding:10px 12px 4px 12px;
+  border-top:1px solid var(--panel-border);
+  margin-top:8px;
+  word-break:break-all;
+}
+
+/* --- Contenido --- */
+.main{
+  flex:1;
+  min-width:0;
+  padding:32px 36px;
+}
+.main h1{font-size:20px;margin:0 0 24px 0;}
+.main a{color:var(--gold);}
+.main a:hover{color:var(--gold-dark);}
+
+.card{
+  background:var(--card);
+  border-radius:16px;
+  padding:24px;
+  margin-bottom:24px;
+  color:#161615;
+}
+.card h2{font-size:14px;margin:0 0 16px 0;}
+
+form{display:flex;gap:10px;flex-wrap:wrap;}
+.field{flex:1;min-width:180px;}
+label{font-size:11.5px;font-weight:600;color:#5a5a5a;display:block;margin-bottom:5px;}
+input[type=text],input[type=email]{
+  width:100%;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  font-size:14px;
+  background:#fcfbf8;
+  outline:none;
+}
+input:focus{border-color:var(--gold-dark);}
+button{
+  padding:10px 18px;
+  border:none;
+  border-radius:8px;
+  background:var(--gold);
+  color:#1c1500;
+  font-weight:700;
+  font-size:13.5px;
+  cursor:pointer;
+  align-self:flex-end;
+}
+
+.error{
+  background:#fdeceb;
+  color:#a5322a;
+  border-radius:8px;
+  padding:10px 12px;
+  font-size:12.5px;
+  margin-top:12px;
+}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--panel-border);}
+th{color:var(--text-dim);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;}
+td.address{font-family:monospace;font-size:12.5px;color:var(--text-dim);}
+
+.badge{
+  display:inline-block;
+  background:var(--gold);
+  color:#1c1500;
+  font-size:10.5px;
+  font-weight:700;
+  padding:2px 8px;
+  border-radius:999px;
+  margin-left:6px;
+}
+.empty{color:var(--text-dim);font-size:13px;padding:12px 0;}
+
+/* --- Responsive: sidebar arriba en pantallas chicas --- */
+@media (max-width: 720px){
+  body{flex-direction:column;}
+  .sidebar{
+    position:static;
+    height:auto;
+    width:100%;
+    flex-direction:row;
+    align-items:center;
+    overflow-x:auto;
+    border-right:none;
+    border-bottom:1px solid var(--panel-border);
+    padding:12px 16px;
+  }
+  .sidebar .brand{margin:0 12px 0 0;}
+  .sidebar .spacer{display:none;}
+  .sidebar .user{display:none;}
+  .main{padding:24px 20px;}
+}
+
+/* --- Health Rate (semáforo de riesgo de liquidación) --- */
+.health{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:700;border:1px solid transparent;white-space:nowrap;}
+.health-ok{color:#6fcf7f;background:rgba(111,207,127,.12);border-color:rgba(111,207,127,.35);}
+.health-warn{color:#e9b73e;background:rgba(233,183,62,.12);border-color:rgba(233,183,62,.35);}
+.health-danger{color:#ee7b6f;background:rgba(238,123,111,.14);border-color:rgba(238,123,111,.4);}
+.health-none{color:var(--text-dim);background:transparent;border-color:var(--panel-border);}
+.health-stale{opacity:.55;}
+
+/* --- Listado de cuentas: encabezados ordenables y columnas numéricas --- */
+th a.sort{color:inherit;text-decoration:none;white-space:nowrap;}
+th a.sort:hover{color:#fff;}
+th a.sort.active{color:var(--gold);}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums;}
+td.muted{color:var(--text-dim);}
+
+/* --- Cabecera de página con acciones a la derecha --- */
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px;}
+.page-head h1{margin:0;}
+.page-actions{display:flex;gap:8px;}
+.btn-link{
+  display:inline-block;
+  padding:7px 14px;
+  border:1px solid var(--panel-border);
+  border-radius:8px;
+  font-size:12.5px;
+  font-weight:600;
+  text-decoration:none;
+  color:var(--gold);
+}
+.btn-link{align-self:auto;background:transparent;font-family:inherit;cursor:pointer;}
+.btn-link:hover{border-color:var(--gold-dark);}
+.btn-link:disabled{opacity:.5;cursor:default;}
+.main a.btn-link:hover{color:#fff;}
