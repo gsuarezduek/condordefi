@@ -84,15 +84,25 @@ function fmt_price($p): string
     return '$' . rtrim(rtrim(number_format($p, 8, '.', ''), '0'), '.');
 }
 
-/** Logo + símbolo. Si el logo no existe (404) se muestra una letra. */
+/** Logo de una red (SVG propio). */
+function chain_icon(string $chain, string $class = 'chain-ico'): string
+{
+    return '<img class="' . h($class) . '" src="/assets/chain-' . h($chain) . '.svg" alt="' . h(CHAINS[$chain]['title']) . '" title="' . h(CHAINS[$chain]['title']) . '">';
+}
+
+/**
+ * Logo + símbolo. Si el logo no existe (404) se muestra una letra. Lleva un
+ * icono chico de la red que solo se ve cuando hay más de una red activada.
+ */
 function token_cell(string $chain, ?string $contract, string $symbol): string
 {
     $letter = mb_strtoupper(mb_substr($symbol !== '' ? $symbol : '?', 0, 1));
-    return '<span class="tok">'
+    return '<span class="tok"><span class="tok-icon">'
         . '<img class="tok-logo" src="' . h(token_logo_url($chain, $contract)) . '" alt="" loading="lazy"'
         . ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-flex\'">'
         . '<span class="tok-logo tok-fallback" style="display:none">' . h($letter) . '</span>'
-        . '<span class="tok-sym">' . h($symbol) . '</span></span>';
+        . chain_icon($chain, 'chain-mini')
+        . '</span><span class="tok-sym">' . h($symbol) . '</span></span>';
 }
 
 /** 0x1234…abcd */
@@ -121,26 +131,21 @@ function render_position_table(string $chain, string $title, array $rows, string
     <?php
 }
 
-/**
- * Dibuja una red de una dirección a partir de la foto guardada ($snap, null si
- * nunca se actualizó). $skip: contratos que el admin ocultó en esa red.
- */
-function render_chain(string $chain, array $cfg, ?array $snap, array $skip, bool $isAdmin, int $addressId): void
+/** Estado de una red de una dirección: cuándo se actualizó, botón de admin y avisos. */
+function render_chain_status(string $chain, array $cfg, ?array $snap, bool $isAdmin, int $addressId): void
 {
     $data = $snap['data'] ?? null;
     $current = $data !== null && ($data['v'] ?? 1) >= SNAPSHOT_VERSION;
     ?>
-    <div class="chain-block">
-      <div class="chain-head">
-        <h3 class="chain-title"><?= h($cfg['title']) ?></h3>
-        <span class="updated">
-          <?= !empty($snap['updated_at']) ? 'Actualizado ' . h(time_ago($snap['updated_at'])) : 'Sin datos todavía' ?>
-        </span>
+    <div class="chain-status by-chain" data-chain="<?= h($chain) ?>" hidden>
+      <div class="chain-status-line">
+        <?= chain_icon($chain) ?>
+        <span class="chain-name"><?= h($cfg['title']) ?></span>
+        <span class="updated"><?= !empty($snap['updated_at']) ? 'Actualizado ' . h(time_ago($snap['updated_at'])) : 'Sin datos todavía' ?></span>
         <?php if ($isAdmin): ?>
           <button type="button" class="btn-small js-refresh" data-address-id="<?= $addressId ?>" data-chain="<?= h($chain) ?>">Actualizar</button>
         <?php endif; ?>
       </div>
-
       <?php if (!empty($snap['error']) && ($isAdmin || $data !== null)): ?>
         <div class="error">
           <?= $isAdmin
@@ -148,7 +153,6 @@ function render_chain(string $chain, array $cfg, ?array $snap, array $skip, bool
               : 'La última actualización falló; estos datos pueden estar desactualizados.' ?>
         </div>
       <?php endif; ?>
-
       <?php if ($data === null): ?>
         <p class="empty">
           <?= $isAdmin
@@ -161,69 +165,111 @@ function render_chain(string $chain, array $cfg, ?array $snap, array $skip, bool
               ? 'Estos datos son de un formato anterior (sin precios ni posiciones). Apretá "Actualizar" para verlos completos.'
               : 'Estos datos están desactualizados. Un administrador tiene que actualizar esta cuenta.' ?>
         </p>
-      <?php else:
-        $view = chain_view($chain, $cfg, $data, $skip);
-      ?>
-        <div class="section-head">
-          <span class="section-name">Wallet</span>
-          <span class="section-total"><?= fmt_usd($view['wallet_usd']) ?></span>
-        </div>
-        <?php if (empty($view['rows'])): ?>
-          <p class="empty">Sin tokens con valor relevante.</p>
-        <?php else: ?>
-          <table>
-            <thead>
-              <tr><th>Token</th><th class="num">Precio</th><th class="num">Cantidad</th><th class="num">Valor USD</th><?php if ($isAdmin): ?><th></th><?php endif; ?></tr>
-            </thead>
-            <tbody>
-              <?php foreach ($view['rows'] as $t): ?>
-                <tr>
-                  <td><?= token_cell($chain, $t['contract'], $t['symbol']) ?></td>
-                  <td class="num"><?= fmt_price($t['price']) ?></td>
-                  <td class="num"><?= fmt_amount($t['amount']) ?></td>
-                  <td class="num"><?= fmt_usd($t['usd']) ?></td>
-                  <?php if ($isAdmin): ?>
-                    <td class="row-action">
-                      <?php if ($t['contract'] !== null): ?>
-                        <form method="post" onsubmit="return confirm('¿Ocultar este token en todas las cuentas?');">
-                          <?= csrf_field() ?>
-                          <input type="hidden" name="action" value="hide_token">
-                          <input type="hidden" name="chain" value="<?= h($chain) ?>">
-                          <input type="hidden" name="contract" value="<?= h($t['contract']) ?>">
-                          <input type="hidden" name="symbol" value="<?= h($t['symbol']) ?>">
-                          <input type="hidden" name="name" value="<?= h($t['name']) ?>">
-                          <button type="submit" class="btn-small">Ocultar</button>
-                        </form>
-                      <?php endif; ?>
-                    </td>
-                  <?php endif; ?>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        <?php endif; ?>
-        <?php if ($view['hidden'] > 0): ?>
-          <p class="empty">
-            <?= $view['hidden'] ?> token(s) ocultos (sin precio de mercado, menos de <?= fmt_usd(WALLET_MIN_USD) ?>, spam o marcados por el admin).
-            <?php if ($isAdmin): ?><a href="/hidden-tokens.php">Gestionar</a><?php endif; ?>
-          </p>
-        <?php endif; ?>
-
-        <?php foreach ($data['protocols'] as $protocol): ?>
-          <div class="section-head protocol-head">
-            <span class="section-name"><?= h($protocol['name']) ?></span>
-            <?php if ($protocol['health_rate'] !== null):
-              $status = health_status((float) $protocol['health_rate']); ?>
-              <span class="health <?= h($status['class']) ?>">Health Rate: <?= number_format((float) $protocol['health_rate'], 2, '.', '') ?> · <?= h($status['label']) ?></span>
-            <?php endif; ?>
-            <span class="section-total"><?= fmt_usd($protocol['net_usd']) ?></span>
-          </div>
-          <?php if (!empty($protocol['supplied'])): render_position_table($chain, 'Supplied', $protocol['supplied'], ''); endif; ?>
-          <?php if (!empty($protocol['borrowed'])): render_position_table($chain, 'Borrowed', $protocol['borrowed'], 'usd-debt'); endif; ?>
-        <?php endforeach; ?>
-
       <?php endif; ?>
     </div>
+    <?php
+}
+
+/**
+ * Dibuja una dirección con todas sus redes juntas: estado por red, una sola
+ * tabla de wallet y las posiciones en protocolos. Cada pieza lleva data-chain
+ * y el JS de la página muestra u oculta según las redes activadas.
+ * @param array<string, array> $byChain fotos de la dirección: red => fila de chain_snapshots
+ */
+function render_address(array $addr, array $byChain, array $skipByChain, bool $isAdmin): void
+{
+    $addressId = (int) $addr['id'];
+    $rows = [];
+    $walletByChain = [];
+    $hiddenByChain = [];
+    $protocols = [];
+    foreach (CHAINS as $chain => $cfg) {
+        $data = $byChain[$chain]['data'] ?? null;
+        if ($data === null || ($data['v'] ?? 1) < SNAPSHOT_VERSION) {
+            continue;
+        }
+        $view = chain_view($chain, $cfg, $data, $skipByChain[$chain]);
+        foreach ($view['rows'] as $r) {
+            $rows[] = $r + ['chain' => $chain];
+        }
+        $walletByChain[$chain] = $view['wallet_usd'];
+        $hiddenByChain[$chain] = $view['hidden'];
+        foreach ($data['protocols'] as $protocol) {
+            $protocols[] = ['chain' => $chain, 'protocol' => $protocol];
+        }
+    }
+    usort($rows, fn ($a, $b) => $b['usd'] <=> $a['usd']);
+    ?>
+    <h2 class="address-title">
+      <?= $addr['label'] ? h($addr['label']) . ' · ' : '' ?><span class="address"><?= h($addr['address']) ?></span>
+      <?= health_badge(address_health($byChain)) ?>
+    </h2>
+
+    <div class="chain-statuses">
+      <?php foreach (CHAINS as $chain => $cfg): render_chain_status($chain, $cfg, $byChain[$chain] ?? null, $isAdmin, $addressId); endforeach; ?>
+    </div>
+
+    <?php if ($walletByChain): ?>
+      <div class="wallet-block" hidden>
+        <div class="section-head">
+          <span class="section-name">Wallet</span>
+          <span class="section-total js-sum" data-by-chain="<?= h(json_encode($walletByChain)) ?>"></span>
+        </div>
+        <p class="empty js-no-tokens" hidden>Sin tokens con valor relevante.</p>
+        <table>
+          <thead>
+            <tr><th>Token</th><th class="num">Precio</th><th class="num">Cantidad</th><th class="num">Valor USD</th><?php if ($isAdmin): ?><th></th><?php endif; ?></tr>
+          </thead>
+          <tbody>
+            <?php foreach ($rows as $t): ?>
+              <tr class="by-chain" data-chain="<?= h($t['chain']) ?>" hidden>
+                <td><?= token_cell($t['chain'], $t['contract'], $t['symbol']) ?></td>
+                <td class="num"><?= fmt_price($t['price']) ?></td>
+                <td class="num"><?= fmt_amount($t['amount']) ?></td>
+                <td class="num"><?= fmt_usd($t['usd']) ?></td>
+                <?php if ($isAdmin): ?>
+                  <td class="row-action">
+                    <?php if ($t['contract'] !== null): ?>
+                      <form method="post" onsubmit="return confirm('¿Ocultar este token en todas las cuentas?');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="hide_token">
+                        <input type="hidden" name="chain" value="<?= h($t['chain']) ?>">
+                        <input type="hidden" name="contract" value="<?= h($t['contract']) ?>">
+                        <input type="hidden" name="symbol" value="<?= h($t['symbol']) ?>">
+                        <input type="hidden" name="name" value="<?= h($t['name']) ?>">
+                        <button type="submit" class="btn-small">Ocultar</button>
+                      </form>
+                    <?php endif; ?>
+                  </td>
+                <?php endif; ?>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+        <?php foreach ($hiddenByChain as $chain => $count): if ($count > 0): ?>
+          <p class="empty by-chain" data-chain="<?= h($chain) ?>" hidden>
+            <?= chain_icon($chain) ?> <?= $count ?> token(s) ocultos en <?= h(CHAINS[$chain]['title']) ?> (sin precio de mercado, menos de <?= fmt_usd(WALLET_MIN_USD) ?>, spam o marcados por el admin).
+            <?php if ($isAdmin): ?><a href="/hidden-tokens.php">Gestionar</a><?php endif; ?>
+          </p>
+        <?php endif; endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+    <?php foreach ($protocols as $item): $protocol = $item['protocol']; ?>
+      <div class="protocol-block by-chain" data-chain="<?= h($item['chain']) ?>" hidden>
+        <div class="section-head protocol-head">
+          <span class="section-name"><?= h($protocol['name']) ?></span>
+          <span class="chain-tag"><?= chain_icon($item['chain']) ?> <?= h(CHAINS[$item['chain']]['title']) ?></span>
+          <?php if ($protocol['health_rate'] !== null):
+            $status = health_status((float) $protocol['health_rate']); ?>
+            <span class="health <?= h($status['class']) ?>">Health Rate: <?= number_format((float) $protocol['health_rate'], 2, '.', '') ?> · <?= h($status['label']) ?></span>
+          <?php endif; ?>
+          <span class="section-total"><?= fmt_usd($protocol['net_usd']) ?></span>
+        </div>
+        <?php if (!empty($protocol['supplied'])): render_position_table($item['chain'], 'Supplied', $protocol['supplied'], ''); endif; ?>
+        <?php if (!empty($protocol['borrowed'])): render_position_table($item['chain'], 'Borrowed', $protocol['borrowed'], 'usd-debt'); endif; ?>
+      </div>
+    <?php endforeach; ?>
     <?php
 }
 
@@ -294,9 +340,6 @@ foreach ($notesJs as $i => $n) {
   .address{font-family:monospace;color:var(--text-dim);font-size:13px;word-break:break-all;}
   .section-title{font-size:15px;margin:32px 0 12px 0;color:#fff;}
   .address-title{font-size:15px;margin:36px 0 4px 0;color:#fff;word-break:break-all;}
-  .chain-block{margin:18px 0 8px 0;padding-top:14px;border-top:1px solid var(--panel-border);}
-  .chain-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
-  .chain-title{font-size:13px;margin:0;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;}
   .updated{color:var(--text-dim);font-size:12px;}
   .page-head h1{font-size:30px;line-height:1.15;}
   .page-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
@@ -314,7 +357,6 @@ foreach ($notesJs as $i => $n) {
   .pill:hover{color:#fff;border-color:var(--text-dim);}
   .pill.active{background:var(--panel-border);color:#fff;border-color:var(--panel-border);}
   .filters select{background:var(--panel);color:#fff;border:1px solid var(--panel-border);border-radius:8px;padding:5px 8px;font-size:12px;}
-  .chain-tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gold);}
   td.when{white-space:nowrap;color:var(--text-dim);font-size:12.5px;}
   td.tx{text-align:right;white-space:nowrap;}
   tr.mv[hidden]{display:none;}
@@ -374,6 +416,22 @@ foreach ($notesJs as $i => $n) {
     outline:none;
   }
   textarea:focus{border-color:var(--gold-dark);}
+  .chain-toggles{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin:20px 0 4px 0;}
+  .chain-toggle{align-self:auto;display:inline-flex;align-items:center;gap:8px;padding:5px 15px 5px 6px;background:transparent;color:var(--text-dim);border:1px solid var(--panel-border);border-radius:999px;font-size:13px;font-weight:600;}
+  .chain-toggle:hover{color:#fff;border-color:var(--text-dim);}
+  .chain-toggle.on{color:#fff;border-color:var(--gold);background:var(--panel);}
+  .chain-toggle-ico{width:24px;height:24px;filter:grayscale(1);opacity:.45;transition:filter .15s,opacity .15s;}
+  .chain-toggle.on .chain-toggle-ico{filter:none;opacity:1;}
+  .chain-ico{width:15px;height:15px;vertical-align:-3px;border-radius:50%;}
+  .chain-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gold);}
+  .tok-icon{position:relative;display:inline-flex;flex:none;}
+  .chain-mini{display:none;position:absolute;right:-4px;bottom:-4px;width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 1.5px var(--panel);}
+  .multi-chain .chain-mini{display:block;}
+  [hidden]{display:none !important;}
+  .chain-statuses{margin:6px 0 4px 0;}
+  .chain-status{margin:6px 0;}
+  .chain-status-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .chain-name{font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;}
   .dir-in{color:#6fcf7f;}
   .dir-out{color:#ee7b6f;}
 </style>
@@ -405,18 +463,29 @@ foreach ($notesJs as $i => $n) {
       </div>
     <?php endforeach; ?>
 
-    <?php if ($hasSummary): ?>
-      <div class="summary">
+    <div class="chain-toggles" id="chain-toggles" role="group" aria-label="Redes">
+      <span class="filter-label">Redes</span>
+      <?php foreach (CHAINS as $chain => $cfg): ?>
+        <button type="button" class="chain-toggle" data-chain="<?= h($chain) ?>" aria-pressed="false" title="Activar / desactivar <?= h($cfg['title']) ?>">
+          <?= chain_icon($chain, 'chain-toggle-ico') ?><span><?= h($cfg['title']) ?></span>
+        </button>
+      <?php endforeach; ?>
+    </div>
+    <p class="empty" id="chains-hint">Activá una red para ver los saldos, tokens y movimientos.</p>
+
+    <?php if ($hasSummary):
+      $by = $summary['by_chain'];
+      $sumAttr = fn (string $key) => h(json_encode(array_map(fn ($c) => $c[$key], $by)));
+    ?>
+      <div class="summary" id="summary" hidden>
         <div class="summary-main">
           <div class="info-label">Balance total</div>
-          <div class="summary-total"><?= fmt_usd($summary['total']) ?></div>
-          <?php if ($summary['missing'] > 0): ?>
-            <div class="updated"><?= $summary['missing'] ?> red(es) sin datos actualizados no están incluidas.</div>
-          <?php endif; ?>
+          <div class="summary-total js-sum" data-by-chain="<?= $sumAttr('total') ?>"></div>
+          <div class="updated js-missing" data-by-chain="<?= $sumAttr('missing') ?>" hidden></div>
         </div>
-        <div><div class="info-label">Wallet</div><div class="info-value"><?= fmt_usd($summary['wallet']) ?></div></div>
-        <div><div class="info-label">Depositado</div><div class="info-value"><?= fmt_usd($summary['supplied']) ?></div></div>
-        <div><div class="info-label">Prestado</div><div class="info-value usd-debt"><?= fmt_usd($summary['borrowed']) ?></div></div>
+        <div><div class="info-label">Wallet</div><div class="info-value js-sum" data-by-chain="<?= $sumAttr('wallet') ?>"></div></div>
+        <div><div class="info-label">Depositado</div><div class="info-value js-sum" data-by-chain="<?= $sumAttr('supplied') ?>"></div></div>
+        <div><div class="info-label">Prestado</div><div class="info-value usd-debt js-sum" data-by-chain="<?= $sumAttr('borrowed') ?>"></div></div>
       </div>
     <?php endif; ?>
 
@@ -436,13 +505,7 @@ foreach ($notesJs as $i => $n) {
       <?php endif; ?>
 
     <?php foreach ($addresses as $addr): ?>
-      <h2 class="address-title">
-        <?= $addr['label'] ? h($addr['label']) . ' · ' : '' ?><span class="address"><?= h($addr['address']) ?></span>
-        <?= health_badge(address_health($snapshots[(int) $addr['id']] ?? [])) ?>
-      </h2>
-      <?php foreach (CHAINS as $chain => $cfg): ?>
-        <?php render_chain($chain, $cfg, $snapshots[(int) $addr['id']][$chain] ?? null, $skipByChain[$chain], $isAdmin, (int) $addr['id']); ?>
-      <?php endforeach; ?>
+      <?php render_address($addr, $snapshots[(int) $addr['id']] ?? [], $skipByChain, $isAdmin); ?>
     <?php endforeach; ?>
     </section>
 
@@ -456,13 +519,6 @@ foreach ($notesJs as $i => $n) {
             <button type="button" class="pill active" data-value="">Todos</button>
             <button type="button" class="pill" data-value="in">Recibidos</button>
             <button type="button" class="pill" data-value="out">Enviados</button>
-          </div>
-          <div class="filter-group" data-filter="chain">
-            <span class="filter-label">Red</span>
-            <button type="button" class="pill active" data-value="">Todas</button>
-            <?php foreach (CHAINS as $chain => $cfg): ?>
-              <button type="button" class="pill" data-value="<?= h($chain) ?>"><?= h($cfg['title']) ?></button>
-            <?php endforeach; ?>
           </div>
           <?php if (count($addresses) > 1): ?>
             <div class="filter-group">
@@ -485,7 +541,7 @@ foreach ($notesJs as $i => $n) {
               <tr class="mv" data-direction="<?= h($ev['direction']) ?>" data-chain="<?= h($ev['chain']) ?>" data-address="<?= $ev['address_id'] ?>">
                 <td class="when"><?= date('d/m/Y H:i', $ev['timestamp']) ?></td>
                 <?php if (count($addresses) > 1): ?><td class="address"><?= h($ev['address_label']) ?></td><?php endif; ?>
-                <td><span class="chain-tag"><?= h($ev['chain']) ?></span></td>
+                <td><span class="chain-tag"><?= chain_icon($ev['chain']) ?> <?= h(CHAINS[$ev['chain']]['title']) ?></span></td>
                 <td class="<?= $ev['direction'] === 'in' ? 'dir-in' : 'dir-out' ?>"><?= $ev['direction'] === 'in' ? '↓ Recibido' : '↑ Enviado' ?></td>
                 <td><?= token_cell($ev['chain'], $ev['contract'] ?? null, (string) $ev['symbol']) ?></td>
                 <td class="num"><?= fmt_amount($ev['amount']) ?></td>
@@ -548,6 +604,63 @@ foreach ($notesJs as $i => $n) {
   </main>
 
   <script>
+    // Redes: interruptores (todas apagadas por defecto) que muestran u ocultan las piezas
+    // marcadas con .by-chain[data-chain] y recalculan los totales (.js-sum). La elección
+    // se recuerda en este navegador.
+    const Chains = (function () {
+      const KEY = 'condor.chains';
+      const all = <?= json_encode(array_keys(CHAINS)) ?>;
+      let saved = [];
+      try { saved = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) {}
+      const enabled = new Set((Array.isArray(saved) ? saved : []).filter(c => all.includes(c)));
+      const listeners = [];
+      const usd = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const sum = el => {
+        const by = JSON.parse(el.dataset.byChain);
+        let t = 0;
+        enabled.forEach(c => { t += by[c] || 0; });
+        return t;
+      };
+
+      function render() {
+        document.querySelectorAll('.chain-toggle').forEach(b => {
+          const on = enabled.has(b.dataset.chain);
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-pressed', on);
+        });
+        document.querySelectorAll('.by-chain').forEach(el => { el.hidden = !enabled.has(el.dataset.chain); });
+        document.querySelectorAll('.js-sum').forEach(el => { el.textContent = usd(sum(el)); });
+        document.querySelectorAll('.js-missing').forEach(el => {
+          const n = sum(el);
+          el.hidden = n === 0;
+          el.textContent = n + ' red(es) sin datos actualizados no están incluidas.';
+        });
+        document.querySelectorAll('.wallet-block').forEach(block => {
+          block.hidden = enabled.size === 0;
+          const any = block.querySelector('tbody tr.by-chain:not([hidden])') !== null;
+          block.querySelector('table').hidden = !any;
+          block.querySelector('.js-no-tokens').hidden = any;
+        });
+        const summary = document.getElementById('summary');
+        if (summary) summary.hidden = enabled.size === 0;
+        document.getElementById('chains-hint').hidden = enabled.size > 0;
+        document.body.classList.toggle('multi-chain', enabled.size > 1);
+        listeners.forEach(f => f());
+      }
+
+      document.querySelectorAll('.chain-toggle').forEach(b => b.addEventListener('click', () => {
+        const c = b.dataset.chain;
+        if (enabled.has(c)) enabled.delete(c); else enabled.add(c);
+        try { localStorage.setItem(KEY, JSON.stringify(Array.from(enabled))); } catch (e) {}
+        render();
+      }));
+
+      return { enabled, onChange: f => listeners.push(f), render };
+    })();
+    Chains.render();
+  </script>
+
+  <script>
     // Pestañas: la elegida se guarda en el hash (#movimientos), así sobrevive a recargas y redirecciones.
     (function () {
       const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -579,18 +692,21 @@ foreach ($notesJs as $i => $n) {
       const empty = document.getElementById('mv-empty');
       const PAGE = 50;
       let shown = PAGE;
-      const filter = { direction: '', chain: '', address: '' };
+      const filter = { direction: '', address: '' };
 
       function apply() {
         let matched = 0;
         rows.forEach(r => {
           const ok = (!filter.direction || r.dataset.direction === filter.direction)
-            && (!filter.chain || r.dataset.chain === filter.chain)
+            && Chains.enabled.has(r.dataset.chain)
             && (!filter.address || r.dataset.address === filter.address);
           if (ok) matched++;
           r.hidden = !ok || matched > shown;
         });
         more.hidden = matched <= shown;
+        empty.textContent = Chains.enabled.size === 0
+          ? 'Activá una red para ver los movimientos.'
+          : 'Ningún movimiento coincide con el filtro.';
         empty.hidden = matched > 0;
       }
 
@@ -607,6 +723,7 @@ foreach ($notesJs as $i => $n) {
       const select = document.getElementById('mv-address');
       if (select) select.addEventListener('change', () => { filter.address = select.value; shown = PAGE; apply(); });
       more.addEventListener('click', () => { shown += PAGE; apply(); });
+      Chains.onChange(() => { shown = PAGE; apply(); });
       apply();
     })();
   </script>

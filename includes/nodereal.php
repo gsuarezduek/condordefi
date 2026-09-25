@@ -158,7 +158,9 @@ function nodereal_recent_activity(string $address, int $limit = 20): array
             foreach ($result['transfers'] ?? [] as $t) {
                 $isNative = $t['category'] === 'external';
                 $value = hexdec($t['value']);
-                $decimals = $isNative ? 18 : (int) hexdec($t['decimal'] ?? '0x12');
+                // En las transferencias 'decimal' llega en decimal ("18"); en los saldos, en hex ("0x12").
+                $decimalField = (string) ($t['decimal'] ?? '18');
+                $decimals = $isNative ? 18 : (int) (str_starts_with($decimalField, '0x') ? hexdec($decimalField) : $decimalField);
                 $amount = $value / (10 ** $decimals);
                 $symbol = $isNative ? 'BNB' : (string) ($t['asset'] ?? '');
 

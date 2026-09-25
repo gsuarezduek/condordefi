@@ -68,19 +68,23 @@ function skip_contracts_by_chain(): array
  */
 function summarize_account(array $addresses, array $snapshots, array $skipByChain): array
 {
-    $summary = ['total' => 0.0, 'wallet' => 0.0, 'supplied' => 0.0, 'borrowed' => 0.0, 'missing' => 0];
+    $summary = ['total' => 0.0, 'wallet' => 0.0, 'supplied' => 0.0, 'borrowed' => 0.0, 'missing' => 0, 'by_chain' => []];
+    foreach (array_keys(CHAINS) as $chain) {
+        $summary['by_chain'][$chain] = ['total' => 0.0, 'wallet' => 0.0, 'supplied' => 0.0, 'borrowed' => 0.0, 'missing' => 0];
+    }
     foreach ($addresses as $addr) {
         foreach (CHAINS as $chain => $cfg) {
             $data = $snapshots[(int) $addr['id']][$chain]['data'] ?? null;
             if ($data === null || ($data['v'] ?? 1) < SNAPSHOT_VERSION) {
                 $summary['missing']++;
+                $summary['by_chain'][$chain]['missing']++;
                 continue;
             }
             $v = chain_view($chain, $cfg, $data, $skipByChain[$chain]);
-            $summary['total'] += $v['total_usd'];
-            $summary['wallet'] += $v['wallet_usd'];
-            $summary['supplied'] += $v['supplied_usd'];
-            $summary['borrowed'] += $v['borrowed_usd'];
+            foreach (['total' => 'total_usd', 'wallet' => 'wallet_usd', 'supplied' => 'supplied_usd', 'borrowed' => 'borrowed_usd'] as $key => $field) {
+                $summary[$key] += $v[$field];
+                $summary['by_chain'][$chain][$key] += $v[$field];
+            }
         }
     }
     $summary['health'] = account_health($addresses, $snapshots);
